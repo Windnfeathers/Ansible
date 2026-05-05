@@ -1,0 +1,11 @@
+---
+# inventories/group_vars/smartshield.yml
+# Connection variables for Lightspeed SmartShield filtering appliances
+# Encrypt sensitive values with ansible-vault before committing
+
+ansible_connection: ssh
+ansible_user: administrator
+ansible_password: "{{ vault_smartshield_password }}"
+ansible_become: true
+ansible_become_method: sudo
+ansible_become_password: "{{ vault_smartshield_become_password }}"

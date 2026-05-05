@@ -1,0 +1,8 @@
+---
+# host_vars/firewall-site1.yml
+# Host-specific variables for a FortiGate host
+# Filename must match the hostname exactly as defined in inventory
+# Encrypt the token with ansible-vault before committing:
+#   ansible-vault encrypt_string 'your_token_here' --name 'fortios_access_token'
+
+fortios_access_token: "{{ vault_fortios_token }}"

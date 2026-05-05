@@ -1,0 +1,11 @@
+---
+# inventories/group_vars/windows.yml
+# Connection variables for all Windows hosts
+# Encrypt sensitive values with ansible-vault before committing
+
+ansible_user: administrator@yourdomain.local
+ansible_password: "{{ vault_windows_password }}"
+ansible_connection: winrm
+ansible_winrm_server_cert_validation: ignore
+ansible_port: 5985
+ansible_winrm_transport: ntlm
