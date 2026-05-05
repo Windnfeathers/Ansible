@@ -1,0 +1,39 @@
+---
+- name: Audit Windows Updates + Reboot Pending
+  hosts: windows_servers
+  gather_facts: false
+  collections:
+    - ansible.windows
+
+  tasks:
+    - name: Search for available updates (no install)
+      ansible.windows.win_updates:
+        state: searched
+        category_names:
+          - SecurityUpdates
+          - CriticalUpdates
+          - UpdateRollups
+          - DefinitionUpdates
+          - Updates
+      register: update_search
+
+    - name: Check reboot pending via registry (CBS/WU/Session Manager)
+      ansible.windows.win_shell: |
+        $pending = $false
+
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') { $pending = $true }
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') { $pending = $true }
+
+        $sm = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'PendingFileRenameOperations' -ErrorAction SilentlyContinue
+        if ($sm -and $sm.PendingFileRenameOperations) { $pending = $true }
+
+        if ($pending) { "REBOOT_PENDING=1" } else { "REBOOT_PENDING=0" }
+      register: reboot_check
+      changed_when: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          updates_found: "{{ update_search.found_update_count | default('unknown') }}"
+          reboot_required: "{{ 'REBOOT_PENDING=1' in reboot_check.stdout }}"

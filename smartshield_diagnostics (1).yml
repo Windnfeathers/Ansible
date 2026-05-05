@@ -1,0 +1,41 @@
+---
+- name: SmartShield Diagnostics Check
+  hosts: smartshield
+  gather_facts: false
+  become: false
+
+  tasks:
+    # --- DNS CHECKS ---
+    - name: Test DNS Block (poker.com)
+      ansible.builtin.command: dig @127.0.0.1 poker.com +short
+      register: dig_poker
+      changed_when: false
+
+    - name: Test DNS Allow (google.com)
+      ansible.builtin.command: dig @127.0.0.1 google.com +short
+      register: dig_google
+      changed_when: false
+
+    # --- SYSTEM CHECKS ---
+    - name: Check Relay Rocket Version
+      ansible.builtin.command: apt list relay-rocket
+      register: rocket_version
+      changed_when: false
+
+    - name: Check OS Version
+      ansible.builtin.command: lsb_release -a
+      register: os_version
+      changed_when: false
+
+    # --- DISPLAY RESULTS ---
+    - name: Show Results
+      ansible.builtin.debug:
+        msg:
+          - "----------------------------------------"
+          - "DNS (Poker):  {{ dig_poker.stdout }}"
+          - "DNS (Google): {{ dig_google.stdout }}"
+          - "----------------------------------------"
+          - "Relay Rocket: {{ rocket_version.stdout }}"
+          - "----------------------------------------"
+          - "OS Distro:    {{ os_version.stdout_lines | select('search', 'Description') | list }}"
+          - "----------------------------------------"

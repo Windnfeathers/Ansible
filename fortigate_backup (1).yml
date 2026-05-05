@@ -1,0 +1,41 @@
+---
+- name: Backup FortiGate configs
+  hosts: fortigates
+  gather_facts: no
+  collections:
+    - fortinet.fortios
+  connection: httpapi
+  vars:
+    ansible_network_os: fortinet.fortios.fortios
+    ansible_httpapi_use_ssl: true
+    # Set to true if your FortiGates have valid certificates and your inventory uses FQDNs
+    ansible_httpapi_validate_certs: false
+    ansible_httpapi_port: 443
+    backup_dir: "/home/administrator/ansible/backups/fortigate"
+  tasks:
+    - name: Create backup directory (local)
+      ansible.builtin.file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: "0750"
+      delegate_to: localhost
+
+    - name: Set date
+      set_fact:
+        datestr: "{{ lookup('pipe', 'date +%F') }}"
+
+    - name: Request FortiGate config backup
+      fortios_monitor_fact:
+        access_token: "{{ fortios_access_token }}"
+        vdom: "{{ vdom | default('root') }}"
+        selector: system_config_backup
+        params:
+          scope: global
+      register: cfg
+
+    - name: Save config to file (local)
+      ansible.builtin.copy:
+        content: "{{ cfg }}"
+        dest: "{{ backup_dir }}/{{ inventory_hostname }}_{{ datestr }}.config"
+        mode: "0640"
+      delegate_to: localhost

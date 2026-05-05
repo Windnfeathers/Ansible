@@ -1,0 +1,65 @@
+---
+all:
+  children:
+
+    # FortiGate firewalls -- one entry per site
+    fortigates:
+      hosts:
+        firewall-site1:
+          ansible_host: 192.0.2.1        # Replace with your FortiGate IP or FQDN
+          fortios_access_token: "your_api_token_here"
+          vdom: root
+        firewall-site2:
+          ansible_host: 192.0.2.2
+          fortios_access_token: "your_api_token_here"
+          vdom: root
+        firewall-site3:
+          ansible_host: 192.0.2.3
+          fortios_access_token: "your_api_token_here"
+          vdom: root
+
+    # Lightspeed SmartShield filtering appliances -- one per site
+    smartshield:
+      hosts:
+        smartshield-site1:
+          ansible_host: 192.0.2.10
+        smartshield-site2:
+          ansible_host: 192.0.2.11
+        smartshield-site3:
+          ansible_host: 192.0.2.12
+
+    # Windows infrastructure -- parent group holds connection variables
+    windows:
+      vars:
+        ansible_user: your_admin_account
+        ansible_password: "{{ vault_windows_password }}"  # Use Ansible Vault
+        ansible_connection: winrm
+        ansible_winrm_transport: kerberos                 # or ntlm depending on your environment
+        ansible_winrm_server_cert_validation: ignore
+      children:
+
+        # Primary domain controller -- should contain exactly one host
+        primary_dc:
+          hosts:
+            dc-primary.yourdomain.local:
+
+        # All domain controllers
+        windows_domain_controllers:
+          hosts:
+            dc-primary.yourdomain.local:
+            dc-site1.yourdomain.local:
+            dc-site2.yourdomain.local:
+
+        # DHCP servers
+        windows_dhcp_servers:
+          hosts:
+            dc-primary.yourdomain.local:
+            dc-site1.yourdomain.local:
+            dc-site2.yourdomain.local:
+
+        # General Windows servers
+        windows_servers:
+          hosts:
+            server1.yourdomain.local:
+            server2.yourdomain.local:
+            server3.yourdomain.local:

@@ -1,0 +1,40 @@
+---
+- name: Restart SmartShield services
+  hosts: smartshield
+  become: yes
+  tasks:
+    - name: Restart lsfilterd
+      command: svc -t /etc/service/lsfilterd
+
+    - name: Restart lsrelayd
+      command: svc -t /etc/service/lsrelayd
+
+    - name: Restart lantern
+      command: svc -t /etc/service/lantern
+
+    - name: Check lsfilterd status
+      command: svstat /etc/service/lsfilterd
+      register: lsfilterd_status
+      changed_when: false
+
+    - name: Check lsrelayd status
+      command: svstat /etc/service/lsrelayd
+      register: lsrelayd_status
+      changed_when: false
+
+    - name: Check lantern status
+      command: svstat /etc/service/lantern
+      register: lantern_status
+      changed_when: false
+
+    - name: Fail if any service is not running
+      fail:
+        msg: |
+          One or more SmartShield services failed to restart:
+          lsfilterd: {{ lsfilterd_status.stdout }}
+          lsrelayd: {{ lsrelayd_status.stdout }}
+          lantern: {{ lantern_status.stdout }}
+      when: >
+        'run:' not in lsfilterd_status.stdout
+        or 'run:' not in lsrelayd_status.stdout
+        or 'run:' not in lantern_status.stdout

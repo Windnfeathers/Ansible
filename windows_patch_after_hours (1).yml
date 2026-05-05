@@ -1,0 +1,151 @@
+---
+- name: Patch primary DC first and verify WinRM is back
+  hosts: primary_dc
+  gather_facts: false
+  collections:
+    - ansible.windows
+
+  tasks:
+    - name: Check reboot pending (pre-patch)
+      ansible.windows.win_shell: |
+        $pending = $false
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') { $pending = $true }
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') { $pending = $true }
+        $sm = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'PendingFileRenameOperations' -ErrorAction SilentlyContinue
+        if ($sm -and $sm.PendingFileRenameOperations) { $pending = $true }
+        if ($pending) { "REBOOT_PENDING=1" } else { "REBOOT_PENDING=0" }
+      register: pre_reboot
+      changed_when: false
+
+    - name: Reboot before patching if required
+      ansible.windows.win_reboot:
+        msg: "Pre-patch reboot to clear pending state"
+        reboot_timeout: 3600
+      when: "'REBOOT_PENDING=1' in pre_reboot.stdout"
+
+    - name: Wait for WinRM to come back (retry loop)
+      ansible.builtin.wait_for_connection:
+        timeout: 30
+      register: winrm_status
+      retries: 40
+      delay: 20
+      until: winrm_status is success
+
+    - name: Install Windows updates
+      ansible.windows.win_updates:
+        category_names:
+          - SecurityUpdates
+          - CriticalUpdates
+          - UpdateRollups
+          - DefinitionUpdates
+          - Updates
+        reboot: false
+      register: update_install
+
+    - name: Check reboot pending (post-patch)
+      ansible.windows.win_shell: |
+        if (
+          Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending' -or
+          Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+        ) { "REBOOT_PENDING=1" } else { "REBOOT_PENDING=0" }
+      register: post_reboot
+      changed_when: false
+
+    - name: Reboot after patching if required
+      ansible.windows.win_reboot:
+        msg: "Post-patch reboot"
+        reboot_timeout: 3600
+      when: "'REBOOT_PENDING=1' in post_reboot.stdout"
+
+    - name: Wait for WinRM to come back (retry loop)
+      ansible.builtin.wait_for_connection:
+        timeout: 30
+      register: winrm_status2
+      retries: 60
+      delay: 20
+      until: winrm_status2 is success
+
+    - name: Quick AD health check (dcdiag)
+      ansible.windows.win_command: dcdiag /q
+      register: dcdiag
+      changed_when: false
+      failed_when: dcdiag.rc != 0
+
+    - name: Final summary
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          updates_installed: "{{ update_install.installed_update_count | default('unknown') }}"
+
+- name: Patch remaining Windows servers (one at a time)
+  hosts: windows_servers:!primary_dc
+  gather_facts: false
+  serial: 1
+  collections:
+    - ansible.windows
+
+  tasks:
+    - name: Check reboot pending (pre-patch)
+      ansible.windows.win_shell: |
+        $pending = $false
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') { $pending = $true }
+        if (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') { $pending = $true }
+        $sm = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name 'PendingFileRenameOperations' -ErrorAction SilentlyContinue
+        if ($sm -and $sm.PendingFileRenameOperations) { $pending = $true }
+        if ($pending) { "REBOOT_PENDING=1" } else { "REBOOT_PENDING=0" }
+      register: pre_reboot
+      changed_when: false
+
+    - name: Reboot before patching if required
+      ansible.windows.win_reboot:
+        msg: "Pre-patch reboot to clear pending state"
+        reboot_timeout: 3600
+      when: "'REBOOT_PENDING=1' in pre_reboot.stdout"
+
+    - name: Wait for WinRM to come back (retry loop)
+      ansible.builtin.wait_for_connection:
+        timeout: 30
+      register: winrm_status
+      retries: 40
+      delay: 20
+      until: winrm_status is success
+
+    - name: Install Windows updates
+      ansible.windows.win_updates:
+        category_names:
+          - SecurityUpdates
+          - CriticalUpdates
+          - UpdateRollups
+          - DefinitionUpdates
+          - Updates
+        reboot: false
+      register: update_install
+
+    - name: Check reboot pending (post-patch)
+      ansible.windows.win_shell: |
+        if (
+          Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending' -or
+          Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+        ) { "REBOOT_PENDING=1" } else { "REBOOT_PENDING=0" }
+      register: post_reboot
+      changed_when: false
+
+    - name: Reboot after patching if required
+      ansible.windows.win_reboot:
+        msg: "Post-patch reboot"
+        reboot_timeout: 3600
+      when: "'REBOOT_PENDING=1' in post_reboot.stdout"
+
+    - name: Wait for WinRM to come back (retry loop)
+      ansible.builtin.wait_for_connection:
+        timeout: 30
+      register: winrm_status2
+      retries: 60
+      delay: 20
+      until: winrm_status2 is success
+
+    - name: Final summary
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          updates_installed: "{{ update_install.installed_update_count | default('unknown') }}"

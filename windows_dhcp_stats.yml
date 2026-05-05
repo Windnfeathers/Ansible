@@ -1,0 +1,40 @@
+---
+- name: Check Windows DHCP Scope Statistics
+  hosts: windows_dhcp_servers
+  gather_facts: false
+
+  tasks:
+    - name: Get DHCP Scope Statistics
+      ansible.windows.win_powershell:
+        script: |
+          $scopes = Get-DhcpServerv4Scope
+          $stats = Get-DhcpServerv4ScopeStatistics
+
+          $results = foreach ($stat in $stats) {
+              $match = $scopes | Where-Object { $_.ScopeId -eq $stat.ScopeId }
+              [PSCustomObject]@{
+                  ScopeID   = $stat.ScopeId.IPAddressToString
+                  Name      = $match.Name
+                  Free      = $stat.Free
+                  InUse     = $stat.InUse
+                  Percent   = $stat.PercentageInUse
+                  State     = $match.State
+              }
+          }
+          $results
+      register: dhcp_output
+
+    - name: Show Scopes with High Usage (> 80%)
+      ansible.builtin.debug:
+        msg: "WARNING: {{ item.ScopeID }} ({{ item.Name }}) is CRITICAL at {{ item.Percent }}% usage!"
+      loop: "{{ dhcp_output.output }}"
+      when: item.Percent > 80
+      loop_control:
+        label: "{{ item.Name }}"
+
+    - name: DHCP Scope Report
+      ansible.builtin.debug:
+        msg: "Scope: {{ item.ScopeID }} ({{ item.Name }}) | Used: {{ item.Percent }}% | Free IPs: {{ item.Free }}"
+      loop: "{{ dhcp_output.output }}"
+      loop_control:
+        label: "{{ item.Name }}"
