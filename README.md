@@ -8,6 +8,7 @@ A collection of Ansible playbooks for infrastructure automation in multi-site en
 - Python 3.x
 - Collections installed per playbook category (see below)
 
+
 ## Repository Structure
 
 ```
@@ -17,11 +18,14 @@ Ansible/
 │   ├── hosts.yml                        # Inventory (see example_inventory.yml)
 │   ├── group_vars/
 │   │   ├── example_smartshield.yml      # SmartShield connection variables
-│   │   ├── example_windows.yml         # Windows connection variables
-|   |   └── examble_netbox_servers_vars.yml  # Netbox connection variables
+│   │   ├── example_windows.yml          # Windows connection variables
+│   │   └── example_netbox_servers_vars.yml  # Netbox connection variables
 │   └── host_vars/
-│       └── example_firewall-site1.yml  # Per-host FortiGate API token example
+│       └── example_firewall-site1.yml   # Per-host FortiGate API token example
 ├── playbooks/
+│   ├── certificates/
+│   │   ├── cert_renewal.yml
+│   │   └── cert_verify.yml
 │   ├── network/
 │   │   └── fortigate_backup.yml
 │   ├── smartshield/
@@ -32,10 +36,13 @@ Ansible/
 │       ├── windows_update_audit.yml
 │       ├── windows_patch_after_hours.yml
 │       └── windows_dhcp_stats.yml
+├── vars/
+│   └── cert_vars.yml                    # Cert file paths (not committed -- see example)
 └── roles/
 ```
 
 ---
+
 
 ## Configuration
 
@@ -48,38 +55,88 @@ Copy `ansible.cfg` to your project root. Key settings:
 
 ---
 
+
 ## Playbooks
+
+### Certificates
+
+#### Wildcard Cert Renewal
+
+**File:** `playbooks/certificates/cert_renewal.yml`
+
+Deploys a renewed wildcard cert to Netbox (nginx), SmartShield appliances (lantern), and FortiGate firewalls (REST API). Builds the fullchain cert, pushes cert and key to all targets, restarts services, and verifies deployment.
+
+**Requirements:**
+
+```
+ansible-galaxy collection install fortinet.fortios
+```
+
+**Cert files required in `/opt/certs/` before running:**
+
+| File | Source |
+| --- | --- |
+| `wildcard.crt` | GoDaddy zip (`<hash>.crt`) |
+| `sf_bundle-g2.crt` | GoDaddy zip (intermediate/chain cert) |
+| `wildcard.key` | Generated during CSR process on cert server |
+
+**Usage:**
+
+```
+ansible-playbook playbooks/certificates/cert_renewal.yml
+```
+
+---
+
+#### Wildcard Cert Verification
+
+**File:** `playbooks/certificates/cert_verify.yml`
+
+Checks and displays SSL cert subject and expiration dates across all wildcard cert targets. Can be run anytime independently of cert_renewal.yml.
+
+**Usage:**
+
+```
+ansible-playbook playbooks/certificates/cert_verify.yml
+```
+
+---
 
 ### Network
 
 #### FortiGate Configuration Backup
+
 **File:** `playbooks/network/fortigate_backup.yml`
 
 Automated backup of FortiGate firewall configurations using the Fortinet REST API. Saves timestamped config files locally for each device in the inventory.
 
 **Requirements:**
+
 ```
 ansible-galaxy collection install fortinet.fortios
 ```
 
 **Usage:**
+
 ```
 ansible-playbook playbooks/network/fortigate_backup.yml
 ```
 
-**Certificate Validation:**
-`ansible_httpapi_validate_certs` is set to `false` by default for compatibility with self-signed certificates. Set to `true` and use FQDNs in your inventory if your FortiGates have valid certificates.
+**Certificate Validation:** `ansible_httpapi_validate_certs` is set to `false` by default for compatibility with self-signed certificates. Set to `true` and use FQDNs in your inventory if your FortiGates have valid certificates.
 
 ---
+
 
 ### SmartShield (Lightspeed)
 
 #### Restart SmartShield Services
+
 **File:** `playbooks/smartshield/smartshield_restart_services.yml`
 
 Restarts the three core SmartShield filtering services (`lsfilterd`, `lsrelayd`, `lantern`) and verifies each is running after restart. Fails with a descriptive message if any service does not come back up.
 
 **Usage:**
+
 ```
 ansible-playbook playbooks/smartshield/smartshield_restart_services.yml
 ```
@@ -87,11 +144,13 @@ ansible-playbook playbooks/smartshield/smartshield_restart_services.yml
 ---
 
 #### SmartShield Diagnostics
+
 **File:** `playbooks/smartshield/smartshield_diagnostics.yml`
 
 Runs a quick diagnostic check against SmartShield appliances including DNS filtering validation, Relay Rocket version check, and OS version reporting.
 
 **Usage:**
+
 ```
 ansible-playbook playbooks/smartshield/smartshield_diagnostics.yml
 ```
@@ -99,30 +158,36 @@ ansible-playbook playbooks/smartshield/smartshield_diagnostics.yml
 ---
 
 #### SmartShield Upgrade
+
 **File:** `playbooks/smartshield/smartshield_upgrade.yml`
 
 Performs a full APT dist-upgrade on SmartShield appliances and reboots if required. Safe to run against multiple appliances simultaneously.
 
 **Usage:**
+
 ```
 ansible-playbook playbooks/smartshield/smartshield_upgrade.yml
 ```
 
 ---
 
+
 ### Windows
 
 **Requirements:**
+
 ```
 ansible-galaxy collection install ansible.windows
 ```
 
 #### Windows Update Audit
+
 **File:** `playbooks/windows/windows_update_audit.yml`
 
 Scans Windows servers for available updates without installing anything. Also checks for pending reboot state via registry. Useful for pre-maintenance assessment.
 
 **Usage:**
+
 ```
 ansible-playbook playbooks/windows/windows_update_audit.yml
 ```
@@ -130,15 +195,18 @@ ansible-playbook playbooks/windows/windows_update_audit.yml
 ---
 
 #### Windows After-Hours Patching
+
 **File:** `playbooks/windows/windows_patch_after_hours.yml`
 
 Patches Windows servers with DC-first sequencing. Patches the primary DC first, verifies AD health with dcdiag, then patches remaining servers one at a time using `serial: 1`. Handles pre and post-patch reboot detection and WinRM reconnection automatically.
 
 **Inventory requirements:**
+
 - `primary_dc` group must contain exactly one host (your primary domain controller)
 - `windows_servers` group contains all Windows servers including the primary DC
 
 **Usage:**
+
 ```
 ansible-playbook playbooks/windows/windows_patch_after_hours.yml
 ```
@@ -146,28 +214,33 @@ ansible-playbook playbooks/windows/windows_patch_after_hours.yml
 ---
 
 #### Windows DHCP Scope Statistics
+
 **File:** `playbooks/windows/windows_dhcp_stats.yml`
 
 Queries DHCP scope statistics from Windows DHCP servers. Reports usage percentage and free IP count per scope. Generates a warning for any scope exceeding 80% utilization.
 
 **Usage:**
+
 ```
 ansible-playbook playbooks/windows/windows_dhcp_stats.yml
 ```
 
 ---
 
+
 ## Inventory Setup
 
 See `inventories/example_inventory.yml` for the expected host group structure. Key groups:
 
 | Group | Used By |
-|-------|---------|
-| `fortigates` | FortiGate backup |
-| `smartshield` | All SmartShield playbooks |
+| --- | --- |
+| `fortigates` | FortiGate backup, cert renewal, cert verify |
+| `smartshield` | All SmartShield playbooks, cert renewal, cert verify |
+| `netbox_servers` | Cert renewal, cert verify |
 | `primary_dc` | Windows patching (DC-first sequencing) |
 | `windows_servers` | Windows patching, update audit |
 | `windows_dhcp_servers` | DHCP statistics |
+
 
 ## Variable Setup
 
@@ -175,10 +248,14 @@ Connection variables live in `inventories/group_vars/`. See the example files fo
 
 - `example_smartshield.yml` -- SSH connection and sudo escalation for SmartShield appliances
 - `example_windows.yml` -- WinRM connection variables for Windows hosts
+- `example_netbox_servers_vars.yml` -- SSH connection and sudo escalation for Netbox
 
 Per-host FortiGate API tokens live in `inventories/host_vars/`. See `example_firewall-site1.yml` for the expected structure.
 
+Cert file paths live in `vars/cert_vars.yml`. This file is not committed -- see `vars/example_cert_vars.yml` for the expected structure.
+
 All sensitive values should be encrypted with Ansible Vault before committing:
+
 ```
 ansible-vault encrypt_string 'your_value' --name 'variable_name'
 ```
