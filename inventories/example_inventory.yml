@@ -17,7 +17,16 @@ all:
           ansible_host: 192.0.2.3
           fortios_access_token: "your_api_token_here"
           vdom: root
-
+    # Netbox Servers
+    netbox_servers:
+      hosts:
+        netbox:
+          ansible_host: 192.0.2.6
+          ansible_user: administrator
+          ansible_connection: ssh
+          ansible_become: true
+          ansible_become_method: sudo
+          
     # Lightspeed SmartShield filtering appliances -- one per site
     smartshield:
       hosts:
