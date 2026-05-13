@@ -17,7 +17,8 @@ Ansible/
 │   ├── hosts.yml                        # Inventory (see example_inventory.yml)
 │   ├── group_vars/
 │   │   ├── example_smartshield.yml      # SmartShield connection variables
-│   │   └── example_windows.yml         # Windows connection variables
+│   │   ├── example_windows.yml         # Windows connection variables
+|   |   └── examble_netbox_servers_vars.yml  # Netbox connection variables
 │   └── host_vars/
 │       └── example_firewall-site1.yml  # Per-host FortiGate API token example
 ├── playbooks/
