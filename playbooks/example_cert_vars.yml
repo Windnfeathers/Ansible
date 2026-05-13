@@ -1,0 +1,21 @@
+# vars/cert_vars.yml
+# Cert file paths for wildcard cert deployment
+# Place GoDaddy cert files in cert_dir before running cert_renewal.yml
+
+cert_dir: /opt/certs
+
+# Source files -- drop these from GoDaddy zip
+cert_crt: "{{ cert_dir }}/wildcard.crt"
+cert_bundle: "{{ cert_dir }}/sf_bundle-g2.crt"
+cert_key: "{{ cert_dir }}/wildcard.key"
+
+# Built by playbook
+fullchain_crt: "{{ cert_dir }}/fullchain.crt"
+
+# Netbox deploy paths
+netbox_cert_path: /etc/ssl/netbox/fullchain.crt
+netbox_key_path: /etc/ssl/netbox/your_domain.key
+
+# SmartShield deploy paths
+smartshield_cert_path: /usr/local/rocket/etc/cert.pem
+smartshield_key_path: /usr/local/rocket/etc/cert_key.pem

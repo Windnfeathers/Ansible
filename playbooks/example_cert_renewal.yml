@@ -1,0 +1,170 @@
+---
+# cert_renewal.yml
+# Wildcard cert deployment
+# Targets: Netbox (nginx), SmartShields (lantern), Fortigates (REST API)
+# Run after dropping wildcard.crt, sf_bundle-g2.crt, and wildcard.key into /opt/certs/
+
+- name: Load cert vars
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars/cert_vars.yml
+  tasks:
+    - name: Build fullchain cert (wildcard + intermediate)
+      shell: cat {{ cert_crt }} {{ cert_bundle }} > {{ fullchain_crt }}
+      args:
+        executable: /bin/bash
+
+    - name: Verify fullchain was created
+      stat:
+        path: "{{ fullchain_crt }}"
+      register: fullchain_stat
+
+    - name: Fail if fullchain not found
+      fail:
+        msg: "fullchain.crt was not created. Check cert_crt and cert_bundle paths."
+      when: not fullchain_stat.stat.exists
+
+
+- name: Deploy cert to Netbox (nginx)
+  hosts: netbox_servers
+  gather_facts: false
+  vars_files:
+    - vars/cert_vars.yml
+  tasks:
+    - name: Copy fullchain cert to Netbox
+      copy:
+        src: "{{ fullchain_crt }}"
+        dest: "{{ netbox_cert_path }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy private key to Netbox
+      copy:
+        src: "{{ cert_key }}"
+        dest: "{{ netbox_key_path }}"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Verify cert and key modulus match
+      shell: |
+        CERT_MD5=$(openssl x509 -noout -modulus -in {{ netbox_cert_path }} | openssl md5)
+        KEY_MD5=$(openssl rsa -noout -modulus -in {{ netbox_key_path }} | openssl md5)
+        if [ "$CERT_MD5" != "$KEY_MD5" ]; then
+          echo "MISMATCH: cert and key do not match"
+          exit 1
+        else
+          echo "OK: cert and key match"
+        fi
+      register: netbox_verify
+      changed_when: false
+
+    - name: Show Netbox verify result
+      debug:
+        msg: "{{ netbox_verify.stdout }}"
+
+    - name: Test nginx config
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+
+    - name: Restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: Verify cert expiration on Netbox
+      shell: echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -dates
+      register: netbox_expiry
+      changed_when: false
+
+    - name: Show Netbox cert expiration
+      debug:
+        msg: "{{ netbox_expiry.stdout }}"
+
+
+- name: Deploy cert to SmartShields
+  hosts: smartshield
+  gather_facts: false
+  vars_files:
+    - vars/cert_vars.yml
+  tasks:
+    - name: Copy cert to SmartShield
+      copy:
+        src: "{{ fullchain_crt }}"
+        dest: "{{ smartshield_cert_path }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy key to SmartShield
+      copy:
+        src: "{{ cert_key }}"
+        dest: "{{ smartshield_key_path }}"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Verify cert and key modulus match on SmartShield
+      shell: |
+        CERT_MD5=$(openssl x509 -noout -modulus -in {{ smartshield_cert_path }} | openssl md5)
+        KEY_MD5=$(openssl rsa -noout -modulus -in {{ smartshield_key_path }} | openssl md5)
+        if [ "$CERT_MD5" != "$KEY_MD5" ]; then
+          echo "MISMATCH: cert and key do not match"
+          exit 1
+        else
+          echo "OK: cert and key match"
+        fi
+      register: shield_verify
+      changed_when: false
+
+    - name: Show SmartShield verify result
+      debug:
+        msg: "{{ shield_verify.stdout }}"
+
+    - name: Restart lantern service
+      command: svc -t /etc/service/lantern
+
+
+- name: Deploy cert to Fortigates (REST API)
+  hosts: fortigates
+  gather_facts: false
+  vars_files:
+    - vars/cert_vars.yml
+  collections:
+    - fortinet.fortios
+  tasks:
+    - name: Read fullchain cert content
+      slurp:
+        src: "{{ fullchain_crt }}"
+      register: cert_content
+      delegate_to: localhost
+
+    - name: Read private key content
+      slurp:
+        src: "{{ cert_key }}"
+      register: key_content
+      delegate_to: localhost
+
+    - name: Import wildcard cert to Fortigate
+      fortios_certificate_local:
+        vdom: "{{ vdom }}"
+        access_token: "{{ fortios_access_token }}"
+        https: true
+        ssl_verify: false
+        state: present
+        certificate_local:
+          name: wildcard_your_domain
+          certificate: "{{ cert_content.content | b64decode }}"
+          private_key: "{{ key_content.content | b64decode }}"
+
+    - name: Assign wildcard cert to Fortigate HTTPS admin interface
+      fortios_system_global:
+        vdom: "{{ vdom }}"
+        access_token: "{{ fortios_access_token }}"
+        https: true
+        ssl_verify: false
+        system_global:
+          admin_server_cert: wildcard_your_domain

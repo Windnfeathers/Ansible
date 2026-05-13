@@ -1,0 +1,56 @@
+---
+# cert_verify.yml
+# Verifies SSL cert expiration across all wildcard cert targets
+# Can be run anytime independently of cert_renewal.yml
+# Output: cert subject and expiration dates per host
+
+- name: Verify cert on Netbox
+  hosts: netbox_servers
+  gather_facts: false
+  tasks:
+    - name: Check cert served on port 443
+      shell: echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -subject -dates
+      register: netbox_cert
+      changed_when: false
+
+    - name: Netbox cert info
+      debug:
+        msg: "{{ inventory_hostname }}: {{ netbox_cert.stdout }}"
+
+
+- name: Verify cert on SmartShields
+  hosts: smartshield
+  gather_facts: false
+  tasks:
+    - name: Check cert served on port 443
+      shell: echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -subject -dates
+      register: shield_cert
+      changed_when: false
+
+    - name: SmartShield cert info
+      debug:
+        msg: "{{ inventory_hostname }}: {{ shield_cert.stdout }}"
+
+
+- name: Verify cert on Fortigates
+  hosts: fortigates
+  gather_facts: false
+  tasks:
+    - name: Check cert served on Fortigate port 443
+      shell: echo | openssl s_client -connect {{ ansible_host }}:443 2>/dev/null | openssl x509 -noout -subject -dates
+      register: fg_cert
+      changed_when: false
+      delegate_to: localhost
+
+    - name: Fortigate cert info
+      debug:
+        msg: "{{ inventory_hostname }}: {{ fg_cert.stdout }}"
+
+
+- name: Summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Reminder
+      debug:
+        msg: "Review output above for notAfter dates. Renew if within 2 weeks of expiration."
